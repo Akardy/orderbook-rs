@@ -22,6 +22,21 @@ impl Orderbook {
         }
     }
 
+    pub fn display(&mut self) {
+        println!("The state of the Orderbook");
+        println!("==========================");
+        println!("ASK");
+        for order in self.ask_limits().iter().rev() {
+            println!("{}: {}", order.price, order.total_volume());
+        }
+        println!("--------------------------");
+        for order in self.bid_limits().iter() {
+            println!("{}: {}", order.price, order.total_volume());
+        }
+        println!("BID");
+        println!("==========================");
+    }
+
     pub fn fill_market_order(&mut self, market_order: &mut Order) {
         let limits = match market_order.bid_or_ask {
             BidOrAsk::Bid => self.ask_limits(),
