@@ -1,8 +1,9 @@
 #![allow(dead_code)]
 use std::collections::HashMap;
 use rust_decimal::prelude::*;
+use uuid::Uuid;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BidOrAsk {
     Bid, 
     Ask,
@@ -12,13 +13,15 @@ pub enum BidOrAsk {
 pub struct Orderbook {
     asks: HashMap<Decimal, Limit>,
     bids: HashMap<Decimal, Limit>,
+    order_map: HashMap<Uuid, (Decimal, BidOrAsk)>
 }
 
 impl Orderbook {
     pub fn new() -> Orderbook {
         Orderbook {
             asks: HashMap::new(),
-            bids: HashMap::new()
+            bids: HashMap::new(),
+            order_map: HashMap::new()
         }
     }
 
@@ -35,6 +38,39 @@ impl Orderbook {
         }
         println!("BID");
         println!("==========================");
+    }
+
+    pub fn cancel_limited_order(&mut self, id: Uuid) {
+        if let Some((price, side)) = self.order_map.get(&id) {
+            match side {
+                BidOrAsk::Bid => {
+                    match self.bids.get_mut(&price) {
+                        Some(limit) => {
+                            limit.cancel_order(id);
+                            if limit.total_volume() == 0.0 {
+                                self.bids.remove(price);
+                            }
+                        },
+                        None => println!("The order doesn't exist, id: {}", id)
+                    }
+                },
+                BidOrAsk::Ask => {
+                    match self.asks.get_mut(&price) {
+                        Some(limit) => {
+                            limit.cancel_order(id);
+                            if limit.total_volume() == 0.0 {
+                                self.asks.remove(price);
+                            }
+                        },
+                        None => println!("The order doesn't exist, id: {}", id)
+                    } 
+                }
+            }
+
+            self.order_map.remove(&id);
+        } else {
+            println!("The order doesn't exist");
+        }
     }
 
     pub fn fill_market_order(&mut self, market_order: &mut Order) {
@@ -68,6 +104,9 @@ impl Orderbook {
     }
 
     pub fn add_limit_order(&mut self, price: Decimal, order: Order) {
+        let order_id = order.id;
+        let bid_or_ask = order.bid_or_ask.clone();
+
         match order.bid_or_ask {
             BidOrAsk::Bid => {
                 let limit = self.bids.get_mut(&price);
@@ -92,6 +131,8 @@ impl Orderbook {
                 }
             },
         }
+
+        self.order_map.insert(order_id, (price, bid_or_ask));
     }
 }
 
@@ -113,7 +154,7 @@ impl Limit {
         self.orders
         .iter()
         .map(|order| order.size)
-        .reduce(|a, b| a + b).unwrap()
+        .sum() 
     }
 
     fn fill_order(&mut self, market_order: &mut Order) {
@@ -138,17 +179,30 @@ impl Limit {
     pub fn add_order(&mut self, order: Order) {
         self.orders.push(order);
     }
+
+    pub fn cancel_order(&mut self, id: Uuid) {
+        let mut i = 0;
+        while i < self.orders.len() {
+            if self.orders[i].id == id {
+                self.orders.remove(i);
+                break;
+            }
+            i += 1;
+        }
+    }
+
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Order {
+    id: Uuid,
     size: f64,
     bid_or_ask: BidOrAsk
 }
 
 impl Order {
     pub fn new(bid_or_ask: BidOrAsk, size: f64) -> Order {
-        Order { bid_or_ask , size }
+        Order { bid_or_ask , size, id: Uuid::new_v4() }
     }
 
     pub fn is_filled(&self) -> bool {
@@ -161,6 +215,26 @@ impl Order {
 pub mod tests {
     use super::*;
     use rust_decimal_macros::dec;
+    
+    #[test]
+    fn cancel_order() {
+        let mut orderbook = Orderbook::new();
+        let buy_order_a = Order::new(BidOrAsk::Bid, 10.0);
+        let buy_order_b = Order::new(BidOrAsk::Bid, 10.0);
+        let cancelled_order = buy_order_a.clone();
+
+        let sell_order = Order::new(BidOrAsk::Ask, 10.0);
+
+        orderbook.add_limit_order(dec!(99.0), buy_order_a);
+        orderbook.add_limit_order(dec!(99.0), buy_order_b);
+        orderbook.add_limit_order(dec!(101.0), sell_order);
+        orderbook.display();
+
+        orderbook.cancel_limited_order(cancelled_order.id);
+        orderbook.display();
+
+        assert_eq!(orderbook.bids.get(&dec!(99.0)).unwrap().total_volume(), 10.0); 
+    }
 
     #[test]
     fn orderbook_fill_market_order_ask() {
