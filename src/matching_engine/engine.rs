@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use rust_decimal::Decimal;
+use uuid::Uuid;
 
 use super::orderbook::{Order, Orderbook};
 
@@ -42,6 +43,22 @@ impl MatchingEngine {
                 orderbook.add_limit_order(price, order);
 
                 println!("placed limit order at price level {}", price);
+                Ok(())
+            },
+            None => {
+                Err(format!(
+                    "The orderbook for the given trading pair ({}) doesn't exist!",
+                    pair.to_string()))
+            }
+        }
+    }
+
+    pub fn cancel_limited_order(&mut self, pair: TradingPair, id: Uuid) -> Result<(), String> {
+        match self.orderbooks.get_mut(&pair) {
+            Some(orderbook) => {
+                orderbook.cancel_limited_order(id);
+
+                println!("The order was cancelled");
                 Ok(())
             },
             None => {
