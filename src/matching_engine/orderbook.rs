@@ -2,6 +2,7 @@
 use std::collections::HashMap;
 use rust_decimal::prelude::*;
 use uuid::Uuid;
+use colored::*;   
 
 #[derive(Debug, Clone)]
 pub enum BidOrAsk {
@@ -28,15 +29,15 @@ impl Orderbook {
     pub fn display(&mut self) {
         println!("The state of the Orderbook");
         println!("==========================");
-        println!("ASK");
+        println!("{}", "ASK".red());
         for order in self.ask_limits().iter().rev() {
-            println!("{}: {}", order.price, order.total_volume());
+            println!("{}", format!("${} : {}", order.price, order.total_volume()).red());
         }
-        println!("--------------------------");
+        println!("{}", "--------------------------".cyan());
         for order in self.bid_limits().iter() {
-            println!("{}: {}", order.price, order.total_volume());
+            println!("{}", format!("${} : {}", order.price, order.total_volume()).green());
         }
-        println!("BID");
+        println!("{}", "BID".green());
         println!("==========================");
     }
 
@@ -79,12 +80,25 @@ impl Orderbook {
             BidOrAsk::Ask => self.bid_limits()
         };
 
+        let mut empty_limits = Vec::new();
+
         for limit_order in limits {
             limit_order.fill_order(market_order);
+
+            if limit_order.total_volume() == 0.0 {
+                empty_limits.push(limit_order.price);
+            }
 
             if market_order.is_filled() {
                 break;
             }
+        }
+
+        for price in empty_limits {
+            match market_order.bid_or_ask {
+                BidOrAsk::Bid => self.asks.remove(&price),
+                BidOrAsk::Ask => self.bids.remove(&price),
+            };
         }
     }
 
@@ -103,6 +117,7 @@ impl Orderbook {
         limits
     }
 
+    // To do: Check if there's a limit order for the price in the opposite side that could fill it.
     pub fn add_limit_order(&mut self, price: Decimal, order: Order) {
         let order_id = order.id;
         let bid_or_ask = order.bid_or_ask.clone();
