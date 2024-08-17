@@ -3,21 +3,23 @@ use rust_decimal::Decimal;
 use uuid::Uuid;
 use std::io;
 use colored::*;   
-use crate::matching_engine::engine::MatchingEngine;
-use crate::matching_engine::orderbook::{BidOrAsk, Order, Orderbook};
+use crate::matching_engine::engine::{MatchingEngine, TradingPair};
+use crate::matching_engine::orderbook::{BidOrAsk, Order};
 
 pub fn run_cli(engine: &mut MatchingEngine) {
-    let mut orderbook = Orderbook::new();
+    let btc_pair = TradingPair::new("BTC".to_string(), "USDT".to_string());
+    engine.add_new_market(&btc_pair);
 
     loop {
         display_menu();
+        
         let choice = get_user_input("Choose:");
 
         match choice.trim() {
-            "1" => place_market_order(&mut orderbook),
-            "2" => place_limit_order(&mut orderbook),
-            "3" => cancel_order(&mut orderbook),
-            "4" => orderbook.display(),
+            "1" => place_market_order(engine, &btc_pair),
+            "2" => place_limit_order(engine, &btc_pair),
+            "3" => cancel_order(engine, &btc_pair),
+            "4" => engine.display_orderbook(&btc_pair).expect("No orderbook available!"),
             "5" => break,
             _ => println!("{}", "This operation isn't available".red())
         }
@@ -41,7 +43,7 @@ fn get_user_input(text: &str) -> String {
 }
 
 
-fn place_market_order(orderbook: &mut Orderbook) {
+fn place_market_order(engine: &mut MatchingEngine, pair: &TradingPair) {
     let side = get_user_input("Enter a side: \n1. Buy. \n2. Sell.");
     
     let side: u8 = side.parse().unwrap();
@@ -64,10 +66,10 @@ fn place_market_order(orderbook: &mut Orderbook) {
     };
 
     let mut order = Order::new(side, quantity);
-    orderbook.fill_market_order(&mut order);
+    engine.place_market_order(pair, &mut order);
 }
 
-fn place_limit_order(orderbook: &mut Orderbook) {
+fn place_limit_order(engine: &mut MatchingEngine, pair: &TradingPair) {
     let side = get_user_input("Enter a side: \n1. Buy. \n2. Sell.");
     let side = match side.trim() {
         "1" => BidOrAsk::Bid,
@@ -94,18 +96,18 @@ fn place_limit_order(orderbook: &mut Orderbook) {
 
     match Decimal::from_f64(price) {
         Some(price) => {
-            orderbook.add_limit_order(price, order);
+            engine.place_limit_order(pair, price, order);
             println!("{}", "The order has been submitted!".green())
         },
         None => return 
     }
 }
 
-fn cancel_order(orderbook: &mut Orderbook) {
+fn cancel_order(engine: &mut MatchingEngine, pair: &TradingPair) {
     let id = get_user_input("Enter order id:");
     let id = Uuid::parse_str(id.as_str()).unwrap();
 
-    orderbook.cancel_limited_order(id);
+    engine.cancel_limited_order(pair, id);
     println!("{}", "The order is cancelled!".green());
 }
 
